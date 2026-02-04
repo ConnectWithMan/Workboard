@@ -1,9 +1,30 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Famral Whiteboard - Digital Online Whiteboard</title>
+    <meta name="description" content="Famral Whiteboard is a free, easy-to-use digital online whiteboard for collaboration, drawing, and brainstorming. No sign-up required.">
+    <meta name="keywords" content="online whiteboard, digital whiteboard, drawing tool, collaboration, brainstorming, sketchpad, famral">
+    <meta name="author" content="Famral">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.famral.com/">
+    <meta property="og:title" content="Famral Whiteboard - Digital Online Whiteboard">
+    <meta property="og:description" content="Famral Whiteboard is a free, easy-to-use digital online whiteboard for collaboration, drawing, and brainstorming.">
+    <meta property="og:image" content="https://www.famral.com/image/whiteboard.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://www.famral.com/">
+    <meta property="twitter:title" content="Famral Whiteboard - Digital Online Whiteboard">
+    <meta property="twitter:description" content="Famral Whiteboard is a free, easy-to-use digital online whiteboard for collaboration, drawing, and brainstorming.">
+    <meta property="twitter:image" content="https://www.famral.com/image/whiteboard.png">
+
+    <link rel="canonical" href="https://www.famral.com/">
     <link rel="icon" href="https://www.famral.com/image/whiteboard.png" type="image/png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -17,15 +38,16 @@
 
         #toolbar {
             position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
             background-color: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(10px);
-            padding: 12px 24px;
+            padding: 24px 12px;
             border-radius: 16px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             display: flex;
+            flex-direction: column;
             align-items: center;
             gap: 20px;
             z-index: 100;
@@ -33,10 +55,13 @@
 
         .tool-group {
             display: flex;
+            flex-direction: column;
             align-items: center;
             gap: 10px;
-            padding-right: 20px;
-            border-right: 1px solid #e0e0e0;
+            padding-right: 0;
+            padding-bottom: 20px;
+            border-right: none;
+            border-bottom: 1px solid #e0e0e0;
         }
 
         button {
@@ -83,6 +108,11 @@
             touch-action: none;
             background-color: #ffffff;
         }
+
+        #brushSize {
+            width: 40px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -91,12 +121,14 @@
             <input type="color" id="colorPicker" value="#000000" title="Color">
             <input type="range" id="brushSize" min="1" max="50" value="5" title="Brush Size">
         </div>
+        <button id="selectBtn" title="Select & Move"><i class="fa-solid fa-arrow-pointer"></i></button>
         <button id="penBtn" class="active" title="Pen"><i class="fa-solid fa-pen"></i></button>
         <button id="eraserBtn" title="Eraser"><i class="fa-solid fa-eraser"></i></button>
+        <button id="textBtn" title="Text"><i class="fa-solid fa-font"></i></button>
+        <button id="uploadBtn" title="Upload Image"><i class="fa-solid fa-image"></i></button>
         <button id="undoBtn" title="Undo"><i class="fa-solid fa-rotate-left"></i></button>
         <button id="redoBtn" title="Redo"><i class="fa-solid fa-rotate-right"></i></button>
         <button id="clearBtn" title="Clear"><i class="fa-solid fa-trash-can"></i></button>
-        <button id="uploadBtn" title="Upload Image"><i class="fa-solid fa-image"></i></button>
         <button id="saveBtn" title="Save"><i class="fa-solid fa-download"></i></button>
         <input type="file" id="imageLoader" accept="image/*" style="display: none;">
     </div>
@@ -109,6 +141,8 @@
         const brushSize = document.getElementById('brushSize');
         const penBtn = document.getElementById('penBtn');
         const eraserBtn = document.getElementById('eraserBtn');
+        const selectBtn = document.getElementById('selectBtn');
+        const textBtn = document.getElementById('textBtn');
         const undoBtn = document.getElementById('undoBtn');
         const redoBtn = document.getElementById('redoBtn');
         const clearBtn = document.getElementById('clearBtn');
@@ -116,39 +150,28 @@
         const saveBtn = document.getElementById('saveBtn');
         const imageLoader = document.getElementById('imageLoader');
 
+        let elements = [];
         let isDrawing = false;
-        let isEraser = false;
-        let lastX = 0;
-        let lastY = 0;
+        let currentTool = 'pen'; // pen, eraser, select, text
+        let selectedElement = null;
+        let dragStart = { x: 0, y: 0 };
+        let currentPath = null;
+
         let undoStack = [];
         let redoStack = [];
-        
-        let floatingImage = null;
-        let imgState = { x: 0, y: 0, width: 0, height: 0 };
-        let isDraggingImage = false;
-        let dragOffset = { x: 0, y: 0 };
-        let savedCanvasSnapshot = null;
 
         function resizeCanvas() {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            tempCtx.drawImage(canvas, 0, 0);
-
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(tempCanvas, 0, 0);
-            
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            redrawCanvas();
         }
 
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // Initial setup
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
         function getCoordinates(e) {
             if (e.touches && e.touches[0]) {
@@ -157,59 +180,165 @@
             return { x: e.clientX, y: e.clientY };
         }
 
+        function redrawCanvas() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            elements.forEach(el => {
+                if (el.type === 'path') {
+                    ctx.beginPath();
+                    ctx.moveTo(el.points[0].x, el.points[0].y);
+                    for (let i = 1; i < el.points.length; i++) {
+                        ctx.lineTo(el.points[i].x, el.points[i].y);
+                    }
+                    ctx.strokeStyle = el.color;
+                    ctx.lineWidth = el.width;
+                    ctx.stroke();
+                } else if (el.type === 'image') {
+                    ctx.drawImage(el.img, el.x, el.y, el.width, el.height);
+                    if (el === selectedElement) {
+                        ctx.strokeStyle = '#007bff';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(el.x, el.y, el.width, el.height);
+                        ctx.setLineDash([]);
+                    }
+                } else if (el.type === 'text') {
+                    ctx.font = el.font;
+                    ctx.fillStyle = el.color;
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(el.text, el.x, el.y);
+                    if (el === selectedElement) {
+                        const metrics = ctx.measureText(el.text);
+                        const h = parseInt(el.font) * 1.2;
+                        ctx.strokeStyle = '#007bff';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(el.x, el.y, metrics.width, h);
+                        ctx.setLineDash([]);
+                    }
+                }
+            });
+        }
+
+        function hitTest(x, y) {
+            for (let i = elements.length - 1; i >= 0; i--) {
+                const el = elements[i];
+                if (el.type === 'image') {
+                    if (x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height) return el;
+                } else if (el.type === 'text') {
+                    ctx.font = el.font;
+                    const metrics = ctx.measureText(el.text);
+                    const h = parseInt(el.font) * 1.2;
+                    if (x >= el.x && x <= el.x + metrics.width && y >= el.y && y <= el.y + h) return el;
+                } else if (el.type === 'path') {
+                    for (let p of el.points) {
+                        if (Math.hypot(p.x - x, p.y - y) < (el.width / 2 + 10)) return el;
+                    }
+                }
+            }
+            return null;
+        }
+
         function startDrawing(e) {
             const coords = getCoordinates(e);
 
-            if (floatingImage) {
-                if (coords.x >= imgState.x && coords.x <= imgState.x + imgState.width &&
-                    coords.y >= imgState.y && coords.y <= imgState.y + imgState.height) {
-                    isDraggingImage = true;
-                    dragOffset.x = coords.x - imgState.x;
-                    dragOffset.y = coords.y - imgState.y;
-                    return;
-                } else {
-                    commitImage();
+            if (currentTool === 'select') {
+                selectedElement = hitTest(coords.x, coords.y);
+                if (selectedElement) {
+                    isDrawing = true; // reusing isDrawing for dragging
+                    dragStart = coords;
+                    redrawCanvas();
                 }
+                return;
+            }
+
+            if (currentTool === 'text') {
+                handleTextTool(coords.x, coords.y);
+                return;
             }
 
             saveState();
             isDrawing = true;
-            lastX = coords.x;
-            lastY = coords.y;
+            
+            currentPath = {
+                type: 'path',
+                points: [{x: coords.x, y: coords.y}],
+                color: currentTool === 'eraser' ? '#ffffff' : colorPicker.value,
+                width: brushSize.value
+            };
+            elements.push(currentPath);
+            redrawCanvas();
         }
 
         function draw(e) {
-            if (isDraggingImage && floatingImage) {
-                e.preventDefault();
-                const coords = getCoordinates(e);
-                imgState.x = coords.x - dragOffset.x;
-                imgState.y = coords.y - dragOffset.y;
-                redrawCanvasWithImage();
-                return;
-            }
-
             if (!isDrawing) return;
             e.preventDefault();
-
             const coords = getCoordinates(e);
             
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(coords.x, coords.y);
-            
-            ctx.lineWidth = brushSize.value;
-            ctx.strokeStyle = isEraser ? '#ffffff' : colorPicker.value;
-            
-            ctx.stroke();
-            
-            lastX = coords.x;
-            lastY = coords.y;
+            if (currentTool === 'select' && selectedElement) {
+                const dx = coords.x - dragStart.x;
+                const dy = coords.y - dragStart.y;
+                
+                if (selectedElement.type === 'path') {
+                    selectedElement.points.forEach(p => { p.x += dx; p.y += dy; });
+                } else {
+                    selectedElement.x += dx;
+                    selectedElement.y += dy;
+                }
+                dragStart = coords;
+                redrawCanvas();
+            } else if (currentTool === 'pen' || currentTool === 'eraser') {
+                currentPath.points.push({x: coords.x, y: coords.y});
+                redrawCanvas();
+            }
         }
 
         function stopDrawing() {
             isDrawing = false;
-            isDraggingImage = false;
-            ctx.beginPath();
+            currentPath = null;
+        }
+
+        function handleTextTool(x, y) {
+            const fontSize = Math.max(14, brushSize.value * 3);
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.style.position = 'fixed';
+            input.style.left = x + 'px';
+            input.style.top = y + 'px';
+            input.style.font = fontSize + 'px Arial';
+            input.style.color = colorPicker.value;
+            input.style.background = 'transparent';
+            input.style.border = '1px dashed #007bff';
+            input.style.outline = 'none';
+            input.style.padding = '0';
+            input.style.zIndex = '1000';
+            input.style.minWidth = '200px';
+
+            document.body.appendChild(input);
+            setTimeout(() => input.focus(), 0);
+
+            let isProcessed = false;
+            const finishText = () => {
+                if (isProcessed) return;
+                isProcessed = true;
+                if (input.value.trim() !== '') {
+                    saveState();
+                    elements.push({
+                        type: 'text',
+                        x: x,
+                        y: y,
+                        text: input.value,
+                        color: colorPicker.value,
+                        font: fontSize + 'px Arial'
+                    });
+                    redrawCanvas();
+                }
+                if (input.parentNode) document.body.removeChild(input);
+            };
+
+            input.addEventListener('blur', finishText);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finishText(); });
         }
 
         canvas.addEventListener('mousedown', startDrawing);
@@ -222,23 +351,42 @@
         canvas.addEventListener('touchend', stopDrawing);
 
         penBtn.addEventListener('click', () => {
-            isEraser = false;
+            currentTool = 'pen';
             penBtn.classList.add('active');
             eraserBtn.classList.remove('active');
+            selectBtn.classList.remove('active');
+            textBtn.classList.remove('active');
         });
 
         eraserBtn.addEventListener('click', () => {
-            isEraser = true;
+            currentTool = 'eraser';
             eraserBtn.classList.add('active');
             penBtn.classList.remove('active');
+            selectBtn.classList.remove('active');
+            textBtn.classList.remove('active');
+        });
+
+        selectBtn.addEventListener('click', () => {
+            currentTool = 'select';
+            selectBtn.classList.add('active');
+            penBtn.classList.remove('active');
+            eraserBtn.classList.remove('active');
+            textBtn.classList.remove('active');
+        });
+
+        textBtn.addEventListener('click', () => {
+            currentTool = 'text';
+            textBtn.classList.add('active');
+            penBtn.classList.remove('active');
+            eraserBtn.classList.remove('active');
+            selectBtn.classList.remove('active');
         });
 
         clearBtn.addEventListener('click', () => {
             if(confirm('Clear whiteboard?')) {
                 saveState();
-                floatingImage = null;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                elements = [];
+                redrawCanvas();
             }
         });
 
@@ -250,42 +398,35 @@
         });
 
         function saveState() {
-            undoStack.push(canvas.toDataURL());
+            const state = JSON.stringify(elements);
+            undoStack.push(state);
             if (undoStack.length > 50) undoStack.shift();
             redoStack = [];
         }
 
         function restoreState(state) {
-            const img = new Image();
-            img.src = state;
-            img.onload = () => {
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-            };
+            elements = JSON.parse(state);
+            elements.forEach(el => {
+                if (el.type === 'image') {
+                    const img = new Image();
+                    img.src = el.dataURL;
+                    el.img = img;
+                    img.onload = () => redrawCanvas();
+                }
+            });
+            redrawCanvas();
         }
 
         undoBtn.addEventListener('click', () => {
-            if (floatingImage) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(savedCanvasSnapshot, 0, 0);
-                floatingImage = null;
-                return;
-            }
             if (undoStack.length > 0) {
-                redoStack.push(canvas.toDataURL());
+                redoStack.push(JSON.stringify(elements));
                 restoreState(undoStack.pop());
             }
         });
 
         redoBtn.addEventListener('click', () => {
-            if (floatingImage) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(savedCanvasSnapshot, 0, 0);
-                floatingImage = null;
-            }
             if (redoStack.length > 0) {
-                undoStack.push(canvas.toDataURL());
+                undoStack.push(JSON.stringify(elements));
                 restoreState(redoStack.pop());
             }
         });
@@ -298,54 +439,29 @@
                 reader.onload = (event) => {
                     const img = new Image();
                     img.onload = () => {
-                        if (floatingImage) commitImage();
-                        
-                        floatingImage = img;
-                        savedCanvasSnapshot = document.createElement('canvas');
-                        savedCanvasSnapshot.width = canvas.width;
-                        savedCanvasSnapshot.height = canvas.height;
-                        savedCanvasSnapshot.getContext('2d').drawImage(canvas, 0, 0);
-
+                        saveState();
                         const scale = Math.min(canvas.width / img.width, canvas.height / img.height, 1) * 0.5;
-                        imgState.width = img.width * scale;
-                        imgState.height = img.height * scale;
-                        imgState.x = (canvas.width - imgState.width) / 2;
-                        imgState.y = (canvas.height - imgState.height) / 2;
-                        
-                        redrawCanvasWithImage();
+                        const width = img.width * scale;
+                        const height = img.height * scale;
+                        elements.push({
+                            type: 'image',
+                            img: img,
+                            dataURL: event.target.result,
+                            x: (canvas.width - width) / 2,
+                            y: (canvas.height - height) / 2,
+                            width: width,
+                            height: height
+                        });
+                        currentTool = 'select';
+                        selectBtn.click();
+                        selectedElement = elements[elements.length - 1];
+                        redrawCanvas();
                     };
                     img.src = event.target.result;
                 };
                 reader.readAsDataURL(e.target.files[0]);
             }
         });
-
-        function redrawCanvasWithImage() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(savedCanvasSnapshot, 0, 0);
-            ctx.drawImage(floatingImage, imgState.x, imgState.y, imgState.width, imgState.height);
-            
-            ctx.save();
-            ctx.strokeStyle = '#007bff';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.strokeRect(imgState.x, imgState.y, imgState.width, imgState.height);
-            ctx.restore();
-        }
-
-        function commitImage() {
-            if (!floatingImage) return;
-            
-            undoStack.push(savedCanvasSnapshot.toDataURL());
-            if (undoStack.length > 50) undoStack.shift();
-            redoStack = [];
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(savedCanvasSnapshot, 0, 0);
-            ctx.drawImage(floatingImage, imgState.x, imgState.y, imgState.width, imgState.height);
-            
-            floatingImage = null;
-        }
 
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoBtn.click(); }
